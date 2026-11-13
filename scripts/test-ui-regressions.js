@@ -89,9 +89,17 @@ for (const id of ['category-browser-navigation', 'category-browser-back', 'categ
 assert.match(app, /function collectIconDirectories\(entries\)[\s\S]*function categoryBrowserListing\(directoryPath, directories, indexCategories\)/, 'real repository directories must drive the hierarchical category browser');
 assert.match(app, /function goCategoryBrowserBack\(\)[\s\S]*navigateCategoryDirectory\(parent\)/, 'folder back navigation must return to the parent folder');
 assert.match(app, /activeScreen === 'library' && canGoBackInCategoryBrowser\(\)[\s\S]*goCategoryBrowserBack\(\)/, 'Android system back must traverse category folders before leaving the library');
-assert.match(app, /ui\.uploadConfirmDirectory\.textContent = pending\.assetDirectory[\s\S]*ui\.uploadConfirmIndex\.textContent = pending\.categoryPath/, 'upload review must show the exact image folder and selected JSON path');
+for (const id of ['upload-confirm-repository', 'upload-confirm-branch', 'upload-confirm-category', 'upload-confirm-directory', 'upload-confirm-index']) {
+  assert.match(html, new RegExp(`<select id="${id}"`), `upload target ${id} must be user-selectable`);
+}
+assert.match(app, /pending\.categoryPath = category\.path[\s\S]*pending\.assetDirectory = directory[\s\S]*pending\.changes = changes/, 'each target selection must rebuild the exact file paths and only the selected JSON index');
+assert.match(app, /uploadConfirmCategory\.addEventListener\('change'[\s\S]*uploadConfirmIndex\.value = path/, 'choosing a category must synchronize the matching JSON index');
+assert.match(app, /uploadConfirmIndex\.addEventListener\('change'[\s\S]*uploadConfirmCategory\.value = path/, 'choosing a JSON index must synchronize its category');
+assert.match(app, /GitHubUrls\.rawContentUrl\(rawContentBaseUrl, state\.owner, state\.repositoryName, state\.branch, path\)/, 'new index URLs must target the selected repository and branch');
+assert.match(app, /await commitChanges\(pending\.changes,[\s\S]*?, pending\)/, 'the final write must use the exact target reviewed by the user');
+assert.match(app, /freshRef\.object\.sha !== expectedCommitSha/, 'a target branch that changed after review must be rejected before writes');
 assert.match(app, /if \(!entries\.length\) return dir \|\| ICON_ROOT/, 'empty indexes must upload beside their own JSON index');
-assert.match(app, /assetDirectory: category\.assetDirectory, emptyIndex: category\.icons\.length === 0/, 'upload review must identify empty indexes and retain the inferred image folder');
+assert.match(app, /const assetDirectory = category\.assetDirectory \|\|[\s\S]*emptyIndex: category\.icons\.length === 0/, 'the initial upload review must preserve empty-index folder defaults');
 assert.match(app, /ui\.repoPickerBack\.addEventListener\('click', \(\) => \{\s*if \(selectedOwner && selectedRepoName\) \{/, 'repository picker back action must work even with no categories');
 const repoPickerBackHandler = app.match(/ui\.repoPickerBack\.addEventListener\('click', \(\) => \{([\s\S]*?)\n  \}\);/);
 assert.ok(repoPickerBackHandler, 'repository picker navigation handler must exist');

@@ -171,7 +171,8 @@
     uploadConfirmModal: $('#upload-confirm-modal'), uploadConfirmRepository: $('#upload-confirm-repository'),
     uploadConfirmBranch: $('#upload-confirm-branch'), uploadConfirmCategory: $('#upload-confirm-category'),
     uploadConfirmIndex: $('#upload-confirm-index'), uploadConfirmDirectory: $('#upload-confirm-directory'),
-    uploadConfirmDirectoryNote: $('#upload-confirm-directory-note'), uploadConfirmFileList: $('#upload-confirm-file-list'),
+    uploadConfirmDirectoryNote: $('#upload-confirm-directory-note'), uploadConfirmSelectionNote: $('#upload-confirm-selection-note'),
+    uploadConfirmFileList: $('#upload-confirm-file-list'),
     uploadConfirmError: $('#upload-confirm-error'), uploadConfirmCancel: $('#upload-confirm-cancel'),
     uploadConfirmClose: $('#upload-confirm-close'), uploadConfirmSubmit: $('#upload-confirm-submit'),
     folderOperationModal: $('#folder-operation-modal'), folderOperationTitle: $('#folder-operation-title'),
@@ -212,6 +213,10 @@
   let pendingMove = null;
   let pendingRename = null;
   let pendingUploadConfirmation = null;
+  let uploadTargetState = null;
+  let uploadTargetContext = null;
+  let uploadTargetLoadSequence = 0;
+  let closeChoiceDialog = null;
   let cutoutBusy = false;
   let cutoutSequence = 0;
   let originalCropShape = 'rounded';
@@ -261,9 +266,13 @@
   let galleryReplaceIndex = null;
   let walkthroughStep = 0;
 
+  function repositoryApiPathFor(owner, name) {
+    if (!owner || !name) throw new Error('请先从 token 可访问的仓库中选择图标库。');
+    return `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`;
+  }
+
   function repositoryApiPath() {
-    if (!selectedOwner || !selectedRepoName) throw new Error('请先从 token 可访问的仓库中选择图标库。');
-    return `/repos/${encodeURIComponent(selectedOwner)}/${encodeURIComponent(selectedRepoName)}`;
+    return repositoryApiPathFor(selectedOwner, selectedRepoName);
   }
 
   function syncLockedControls() {
@@ -426,15 +435,37 @@
       button.setAttribute('aria-label', `${label}: ${value}`);
     });
   }
-
   function openSettingsChoiceDialog(selectId, trigger) {
+    openChoiceDialog(selectId, trigger, false);
+  }
+  function openUploadTargetChoiceDialog(selectId, trigger) {
+    openChoiceDialog(selectId, trigger, true);
+  }
+  function updateUploadTargetChoiceButtons() {
+    document.querySelectorAll('.upload-target-choice-button[data-choice-select]').forEach((button) => {
+      const select = document.getElementById(button.dataset.choiceSelect);
+      if (!select) return;
+      const value = select.selectedOptions[0]?.textContent || (appLanguage === 'en' ? 'Choose an option' : '请选择');
+      const label = button.closest('.upload-confirm-target-row')?.querySelector('.upload-confirm-target-label')?.textContent || '';
+      const valueNode = button.querySelector('.upload-target-choice-value');
+      if (valueNode) valueNode.textContent = value;
+      else button.textContent = value;
+      button.disabled = select.disabled || select.options.length === 0;
+      button.setAttribute('aria-label', `${label}: ${value}`);
+    });
+  }
+  function openChoiceDialog(selectId, trigger, isUploadTarget) {
     const select = document.getElementById(selectId);
     const modal = $('#settings-choice-modal');
     const title = $('#settings-choice-title');
     const options = $('#settings-choice-options');
     if (!select || !modal || !options) return;
-    const row = trigger.closest('.preference-row');
-    title.textContent = row?.querySelector('strong')?.textContent || (appLanguage === 'en' ? 'Choose an option' : '选择选项');
+    const row = trigger.closest(isUploadTarget ? '.upload-confirm-target-row' : '.preference-row');
+    const label = row?.querySelector(isUploadTarget ? '.upload-confirm-target-label' : 'strong')?.textContent;
+    title.textContent = label || (appLanguage === 'en' ? 'Choose an option' : '选择选项');
+    $('#settings-choice-modal .section-kicker').textContent = isUploadTarget
+      ? (appLanguage === 'en' ? 'UPLOAD DESTINATION' : '本次上传目标')
+      : (appLanguage === 'en' ? 'DEVICE PREFERENCES' : '本机偏好');
     options.replaceChildren();
     const optionButtons = [...select.options].map((option) => {
       const button = document.createElement('button');
@@ -442,6 +473,7 @@
       button.className = 'settings-choice-option';
       button.setAttribute('role', 'radio');
       button.setAttribute('aria-checked', String(option.value === select.value));
+      button.tabIndex = option.value === select.value ? 0 : -1;
       button.textContent = option.textContent;
       if (option.value === select.value) button.classList.add('selected');
       button.addEventListener('click', () => {
@@ -450,6 +482,7 @@
         close();
         if (changed) select.dispatchEvent(new Event('change', { bubbles: true }));
         updateSettingsChoiceButtons();
+        updateUploadTargetChoiceButtons();
       });
       options.append(button);
       return button;
@@ -457,30 +490,51 @@
     modal.classList.remove('hidden');
     document.documentElement.classList.add('settings-choice-open');
     const previousFocus = document.activeElement;
+    trigger.setAttribute('aria-expanded', 'true');
     const close = () => {
       modal.classList.add('hidden');
       document.documentElement.classList.remove('settings-choice-open');
       modal.removeEventListener('click', onModalClick);
       document.removeEventListener('keydown', onKeydown);
+      trigger.setAttribute('aria-expanded', 'false');
+      if (closeChoiceDialog === close) closeChoiceDialog = null;
       if (previousFocus && typeof previousFocus.focus === 'function') previousFocus.focus();
     };
+    closeChoiceDialog = close;
     const onModalClick = (event) => {
       if (event.target.matches('[data-settings-choice-close]')) close();
+    };
+    const focusOption = (index) => {
+      if (!optionButtons.length) return;
+      const next = (index + optionButtons.length) % optionButtons.length;
+      optionButtons.forEach((button, buttonIndex) => { button.tabIndex = buttonIndex === next ? 0 : -1; });
+      optionButtons[next].focus();
     };
     const onKeydown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         close();
-      } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && optionButtons.length) {
         event.preventDefault();
         const current = optionButtons.indexOf(document.activeElement);
-        const step = event.key === 'ArrowDown' ? 1 : -1;
-        optionButtons[(current + step + optionButtons.length) % optionButtons.length]?.focus();
+        if (event.key === 'Home') focusOption(0);
+        else if (event.key === 'End') focusOption(optionButtons.length - 1);
+        else focusOption((current < 0 ? 0 : current) + (event.key === 'ArrowDown' ? 1 : -1));
+      } else if (event.key === 'Tab') {
+        const focusable = [$('#settings-choice-close'), ...optionButtons];
+        const current = focusable.indexOf(document.activeElement);
+        if (event.shiftKey && current <= 0) {
+          event.preventDefault();
+          focusable.at(-1)?.focus();
+        } else if (!event.shiftKey && current === focusable.length - 1) {
+          event.preventDefault();
+          focusable[0]?.focus();
+        }
       }
     };
     modal.addEventListener('click', onModalClick);
     document.addEventListener('keydown', onKeydown);
-    optionButtons.find((button) => button.getAttribute('aria-checked') === 'true')?.focus();
+    (optionButtons.find((button) => button.getAttribute('aria-checked') === 'true') || $('#settings-choice-close')).focus();
   }
 
   function setCacheStatus(kind, zh, en) {
@@ -4317,17 +4371,23 @@
     }
   };
 
-  async function createBlob(content) {
-    return request(`${repositoryApiPath()}/git/blobs`, { method: 'POST', body: JSON.stringify({ content, encoding: 'base64' }) });
+  async function createBlob(content, target = {}) {
+    const path = repositoryApiPathFor(target.owner || selectedOwner, target.repositoryName || selectedRepoName);
+    return request(`${path}/git/blobs`, { method: 'POST', body: JSON.stringify({ content, encoding: 'base64' }) });
   }
 
-  async function commitChanges(changes, message) {
+  async function commitChanges(changes, message, target = {}) {
     if (!changes.length) return;
-    const freshRef = await request(`${repositoryApiPath()}/git/ref/heads/${encodeURIComponent(branch)}`);
-    if (freshRef.object.sha !== commitSha) throw new Error('仓库在页面打开后又有了新提交。为避免覆盖他人的改动，请断开后重新连接再试。');
+    const owner = target.owner || selectedOwner;
+    const name = target.repositoryName || selectedRepoName;
+    const targetBranch = target.branch || branch;
+    const expectedCommitSha = target.commitSha || commitSha;
+    const apiPath = repositoryApiPathFor(owner, name);
+    const freshRef = await request(`${apiPath}/git/ref/heads/${encodeURIComponent(targetBranch)}`);
+    if (freshRef.object.sha !== expectedCommitSha) throw new Error('目标仓库或分支在预览后又有新提交。为避免覆盖他人的改动，请取消并重新准备上传。');
     const freshCommitSha = freshRef.object.sha;
-    const freshCommit = await request(`${repositoryApiPath()}/git/commits/${freshCommitSha}`);
-    const freshTree = await request(`${repositoryApiPath()}/git/trees/${freshCommit.tree.sha}?recursive=1`);
+    const freshCommit = await request(`${apiPath}/git/commits/${freshCommitSha}`);
+    const freshTree = await request(`${apiPath}/git/trees/${freshCommit.tree.sha}?recursive=1`);
     if (freshTree.truncated) throw new Error('仓库文件树过大，无法安全写入。');
     const currentPaths = new Set((freshTree.tree || []).filter((item) => item.type === 'blob').map((item) => item.path));
     const entryList = [];
@@ -4337,14 +4397,14 @@
       } else if (change.sha) {
         entryList.push({ path: change.path, mode: change.mode || '100644', type: 'blob', sha: change.sha });
       } else {
-        const blob = await createBlob(change.content);
+        const blob = await createBlob(change.content, { owner, repositoryName: name });
         entryList.push({ path: change.path, mode: '100644', type: 'blob', sha: blob.sha });
       }
     }
     if (!entryList.length) return;
-    const nextTree = await request(`${repositoryApiPath()}/git/trees`, { method: 'POST', body: JSON.stringify({ base_tree: freshCommit.tree.sha, tree: entryList }) });
-    const nextCommit = await request(`${repositoryApiPath()}/git/commits`, { method: 'POST', body: JSON.stringify({ message, tree: nextTree.sha, parents: [freshCommitSha] }) });
-    await request(`${repositoryApiPath()}/git/refs/heads/${encodeURIComponent(branch)}`, { method: 'PATCH', body: JSON.stringify({ sha: nextCommit.sha, force: false }) });
+    const nextTree = await request(`${apiPath}/git/trees`, { method: 'POST', body: JSON.stringify({ base_tree: freshCommit.tree.sha, tree: entryList }) });
+    const nextCommit = await request(`${apiPath}/git/commits`, { method: 'POST', body: JSON.stringify({ message, tree: nextTree.sha, parents: [freshCommitSha] }) });
+    await request(`${apiPath}/git/refs/heads/${encodeURIComponent(targetBranch)}`, { method: 'PATCH', body: JSON.stringify({ sha: nextCommit.sha, force: false }) });
   }
 
   async function commitStagedChanges() {
@@ -4406,61 +4466,295 @@
     text('#upload-confirm-kicker', en ? 'GITHUB · FINAL REVIEW' : '写入 GitHub · 最后确认');
     text('#upload-confirm-title', en ? 'Confirm icon upload?' : '确认上传图标？');
     text('#upload-confirm-description', en
-      ? 'This adds the image file(s) and updates the selected JSON index. Nothing is sent until you confirm below.'
-      : '确认后会新增图像文件并更新所选 JSON 索引。只有点击下方确认后才会提交。');
+      ? 'Choose the destination, review the resulting image paths and JSON index, then confirm. Nothing is written before confirmation.'
+      : '可选择本次上传目标；请核对生成的图片路径和 JSON 索引。只有点击下方确认后才会写入。');
     text('#upload-confirm-repository-label', en ? 'Repository' : '仓库');
     text('#upload-confirm-branch-label', en ? 'Branch' : '分支');
-    text('#upload-confirm-category-label', en ? 'Category' : '目标分类');
-    text('#upload-confirm-directory-label', en ? 'Image destination folder' : '目标图片文件夹');
+    text('#upload-confirm-category-label', en ? 'Target category' : '目标分类');
+    text('#upload-confirm-directory-label', en ? 'Image folder' : '目标图片文件夹');
     text('#upload-confirm-index-label', en ? 'JSON index' : 'JSON 索引');
+    text('#upload-confirm-selection-note', en
+      ? 'Category and JSON index stay in sync. Changing repository or branch reloads valid indexes; selections affect this upload only.'
+      : '分类与 JSON 索引相互联动；切换仓库或分支后会重新读取有效索引。选择只影响本次预览。');
     text('#upload-confirm-cancel', en ? 'Cancel' : '取消');
     text('#upload-confirm-submit', en ? 'Upload and save' : '确认上传并保存');
     text('#upload-confirm-atomic-note', en
-      ? 'The image file(s) and this JSON index will be updated together in one GitHub commit. Other category indexes will not be changed.'
-      : '图像文件与上述 JSON 索引会在同一个 GitHub 提交中更新；不会修改其他分类索引。');
+      ? 'The image file(s) and the selected JSON index will be updated together in one GitHub commit. Other indexes will not be changed.'
+      : '图像文件与所选 JSON 索引会在同一个 GitHub 提交中更新；不会修改其他分类索引。');
     ui.uploadConfirmClose.setAttribute('aria-label', en ? 'Cancel upload' : '取消上传');
     const files = pendingUploadConfirmation?.files || [];
     text('#upload-confirm-files-title', en ? `Files to upload · ${files.length}` : `将上传的文件 · ${files.length} 个`);
+    updateUploadTargetChoiceButtons();
   }
 
-  function openUploadConfirmation(pending) {
-    pendingUploadConfirmation = pending;
-    ui.uploadConfirmRepository.textContent = `${pending.owner}/${pending.repositoryName}`;
-    ui.uploadConfirmBranch.textContent = pending.branch;
-    ui.uploadConfirmCategory.textContent = pending.categoryLabel;
-    ui.uploadConfirmDirectory.textContent = pending.assetDirectory;
-    ui.uploadConfirmIndex.textContent = pending.categoryPath;
-    ui.uploadConfirmDirectoryNote.textContent = pending.emptyIndex
-      ? (appLanguage === 'en'
-        ? 'This index is empty, so new images will be placed in the same folder as this JSON index.'
-        : '该索引目前没有图标；新图片将放在此 JSON 索引所在的文件夹。')
-      : (appLanguage === 'en'
-      ? 'Resolvable existing image URLs reuse their folder; otherwise the selected index default is used. The exact path is shown above.'
-        : '可解析的现有图片 URL 会沿用其文件夹；否则按所选索引的默认规则确定，实际路径见上方。');
+  function uploadTargetRepositories() {
+    const items = [...accessibleRepositories];
+    if (selectedOwner && selectedRepoName && !items.some((item) => repositoryIdentity(item) === `${selectedOwner}/${selectedRepoName}`.toLowerCase())) {
+      items.unshift(normalizeRepository(repository || { owner: selectedOwner, name: selectedRepoName, default_branch: branch }));
+    }
+    return items.filter(Boolean).sort((a, b) => repositoryIdentity(a).localeCompare(repositoryIdentity(b)));
+  }
+
+  function setUploadSelectOptions(select, items, selectedValue = '', placeholder = '', disabled = select.disabled) {
+    select.disabled = disabled;
+    select.replaceChildren();
+    if (placeholder) {
+      const option = document.createElement('option');
+      option.value = '';
+      option.textContent = placeholder;
+      select.append(option);
+    }
+    for (const item of items) {
+      const option = document.createElement('option');
+      option.value = item.value;
+      option.textContent = item.label;
+      select.append(option);
+    }
+    if (items.some((item) => item.value === selectedValue)) select.value = selectedValue;
+    else if (items.length) select.value = items[0].value;
+    updateUploadTargetChoiceButtons();
+  }
+
+  function uploadTargetError(message) {
+    uploadTargetState = null;
+    ui.uploadConfirmError.textContent = message;
+    ui.uploadConfirmError.classList.remove('hidden');
+    ui.uploadConfirmSubmit.disabled = true;
+    for (const select of [ui.uploadConfirmCategory, ui.uploadConfirmIndex, ui.uploadConfirmDirectory]) {
+      select.disabled = true;
+      setUploadSelectOptions(select, [], '', appLanguage === 'en' ? 'Unavailable' : '不可用');
+    }
+  }
+
+  function uploadPlanError(message) {
+    ui.uploadConfirmError.textContent = message;
+    ui.uploadConfirmError.classList.remove('hidden');
+    ui.uploadConfirmSubmit.disabled = true;
+  }
+
+  async function fetchUploadTargetBranches(owner, name) {
+    const path = repositoryApiPathFor(owner, name);
+    const branches = [];
+    for (let page = 1; page <= 20; page += 1) {
+      const batch = await request(`${path}/branches?per_page=100&page=${page}`);
+      if (!Array.isArray(batch)) throw new Error(appLanguage === 'en' ? 'GitHub returned an invalid branch list.' : 'GitHub 返回的分支列表格式无效。');
+      branches.push(...batch.map((item) => item?.name).filter((item) => typeof item === 'string' && item));
+      if (batch.length < 100) return [...new Set(branches)].sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    }
+    throw new Error(appLanguage === 'en' ? 'The repository has too many branches to load safely.' : '分支数量过多，无法安全读取。');
+  }
+
+  function inferUploadTargetDirectory(indexPath, entries, files, owner, name) {
+    for (const entry of entries || []) {
+      const reference = GitHubUrls.rawReference(entry.url || '', [rawContentBaseUrl, ...rawBaseHistory, DEFAULT_RAW_BASE], owner, name);
+      const filePath = reference?.path || '';
+      if (filePath && files.has(filePath)) return filePath.includes('/') ? filePath.slice(0, filePath.lastIndexOf('/')) : iconRootForPath(indexPath);
+    }
+    const dir = indexPath.includes('/') ? indexPath.slice(0, indexPath.lastIndexOf('/')) : iconRootForPath(indexPath);
+    if (!entries?.length) return dir || iconRootForPath(indexPath);
+    const root = iconRootForPath(indexPath);
+    return dir === root ? root : `${dir}/icon`;
+  }
+
+  async function loadUploadTargetBranch(owner, name, targetBranch, generation, preferredCategoryPath = '') {
+    const apiPath = repositoryApiPathFor(owner, name);
+    const ref = await request(`${apiPath}/git/ref/heads/${encodeURIComponent(targetBranch)}`);
+    const targetCommitSha = ref?.object?.sha;
+    if (!targetCommitSha) throw new Error(appLanguage === 'en' ? 'Could not read the selected branch head.' : '无法读取所选分支的最新提交。');
+    const commit = await request(`${apiPath}/git/commits/${targetCommitSha}`);
+    const tree = await request(`${apiPath}/git/trees/${commit.tree.sha}?recursive=1`);
+    if (tree.truncated) throw new Error(appLanguage === 'en' ? 'This repository tree is too large to inspect safely.' : '仓库文件树过大，无法安全读取。');
+    const entries = tree.tree || [];
+    const files = new Map(entries.filter((item) => item.type === 'blob').map((item) => [item.path, item]));
+    const directories = collectIconDirectories(entries);
+    const discovered = [];
+    for (const indexPath of [...files.keys()].filter(isIconIndexPath)) {
+      const blob = files.get(indexPath);
+      try {
+        const data = await request(`${apiPath}/git/blobs/${blob.sha}`);
+        const parsed = JSON.parse(decodeBase64Utf8(data.content || ''));
+        if (!Array.isArray(parsed.icons)) continue;
+        const icons = parsed.icons.filter((entry) => entry && typeof entry === 'object' && typeof entry.name === 'string' && typeof entry.url === 'string');
+        const label = typeof parsed.name === 'string' && parsed.name.trim() ? parsed.name.trim() : indexPath.split('/').slice(1, -1).join('/') || (appLanguage === 'en' ? 'Icon library' : '默认图标包');
+        const assetDirectory = inferUploadTargetDirectory(indexPath, icons, files, owner, name);
+        if (assetDirectory) directories.add(assetDirectory);
+        discovered.push({ path: indexPath, data: { ...parsed, icons }, label, description: typeof parsed.description === 'string' ? parsed.description : '', icons, assetDirectory });
+      } catch {
+        // Malformed JSON and unrelated JSON files are deliberately not selectable.
+      }
+    }
+    if (generation !== uploadTargetLoadSequence || !pendingUploadConfirmation) return;
+    discovered.sort((a, b) => b.icons.length - a.icons.length || a.path.localeCompare(b.path, 'zh-CN'));
+    if (!discovered.length) throw new Error(appLanguage === 'en' ? 'No valid icon JSON index was found on this branch.' : '此分支没有找到有效的图标 JSON 索引。');
+    uploadTargetState = { owner, repositoryName: name, branch: targetBranch, commitSha: targetCommitSha, files, directories, categories: discovered };
+    const preferred = discovered.some((item) => item.path === preferredCategoryPath) ? preferredCategoryPath : discovered[0].path;
+    renderUploadTargetCategories(uploadTargetState, preferred);
+  }
+
+  function renderUploadTargetCategories(state, selectedPath) {
+    const categories = state.categories;
+    const categoryOptions = categories.map((category) => ({ value: category.path, label: `${category.label} · ${category.path}` }));
+    const indexOptions = categories.map((category) => ({ value: category.path, label: category.path }));
+    setUploadSelectOptions(ui.uploadConfirmCategory, categoryOptions, selectedPath, '', false);
+    setUploadSelectOptions(ui.uploadConfirmIndex, indexOptions, selectedPath, '', false);
+    updateUploadTargetDirectories(selectedPath);
+    ui.uploadConfirmError.classList.add('hidden');
+    ui.uploadConfirmError.textContent = '';
+    ui.uploadConfirmSubmit.disabled = false;
+    refreshUploadPlanPreview();
+  }
+
+  function updateUploadTargetDirectories(categoryPath) {
+    const state = uploadTargetState;
+    const category = state?.categories.find((item) => item.path === categoryPath);
+    if (!state || !category) {
+      setUploadSelectOptions(ui.uploadConfirmDirectory, [], '', appLanguage === 'en' ? 'Choose an index first' : '请先选择索引', true);
+      return;
+    }
+    const root = iconRootForPath(category.path);
+    const directorySet = new Set([...state.directories].filter((path) => path === root || path.startsWith(`${root}/`)));
+    if (category.assetDirectory) directorySet.add(category.assetDirectory);
+    const directories = [...directorySet].filter((path) => path && !path.startsWith('/') && !path.split('/').includes('..'))
+      .sort((a, b) => a.localeCompare(b, 'zh-CN'));
+    setUploadSelectOptions(ui.uploadConfirmDirectory, directories.map((path) => ({ value: path, label: path })), category.assetDirectory, '', false);
+  }
+
+  function refreshUploadPlanPreview() {
+    const pending = pendingUploadConfirmation;
+    const state = uploadTargetState;
+    if (!pending || !state) return;
+    const categoryPath = ui.uploadConfirmCategory.value;
+    const category = state.categories.find((item) => item.path === categoryPath);
+    const directory = ui.uploadConfirmDirectory.value;
+    if (!category || ui.uploadConfirmIndex.value !== categoryPath || !directory) {
+      uploadPlanError(appLanguage === 'en' ? 'Choose a valid category, JSON index and image folder.' : '请选择有效的分类、JSON 索引和图片文件夹。');
+      return;
+    }
+    const root = iconRootForPath(category.path);
+    if (!root || (directory !== root && !directory.startsWith(`${root}/`)) || directory.startsWith('/') || directory.split('/').includes('..') || !state.directories.has(directory) && directory !== category.assetDirectory) {
+      uploadPlanError(appLanguage === 'en' ? 'The image folder is incompatible with this index.' : '此图片文件夹与所选索引不兼容。');
+      return;
+    }
+    const incomingNames = new Set();
+    const changes = [];
+    const fileRows = [];
+    const nextIcons = [...category.icons];
+    for (const file of pending.files) {
+      const name = file.name;
+      const extension = fileExtension(name);
+      const baseName = name.replace(/\.[^.]+$/, '');
+      if (!name || name === '.' || name === '..' || /[\\/\u0000-\u001f\u007f]/.test(name)
+          || !ALLOWED_EXTENSIONS.has(extension) || extension !== fileExtension(file.file.name) || !baseName || baseName.length > 120) {
+        uploadPlanError(appLanguage === 'en'
+          ? `Invalid upload name “${name}”. Keep the original extension and use 1–120 name characters without slashes.`
+          : `上传名称“${name}”无效。请保留原扩展名，名称需为 1–120 个字符且不能含斜线。`);
+        return;
+      }
+      const path = `${directory}/${name}`;
+      const collisionKey = path.toLocaleLowerCase();
+      if (incomingNames.has(collisionKey) || [...state.files.keys()].some((known) => known.toLocaleLowerCase() === collisionKey)) {
+        uploadPlanError(appLanguage === 'en' ? `“${name}” already exists in ${directory}. Rename it or choose another folder.` : `目标文件夹 ${directory} 中已存在“${name}”，请改名或选择其他文件夹。`);
+        return;
+      }
+      incomingNames.add(collisionKey);
+      changes.push({ path, content: file.content });
+      fileRows.push({ file, path });
+      nextIcons.push({ name: baseName, url: GitHubUrls.rawContentUrl(rawContentBaseUrl, state.owner, state.repositoryName, state.branch, path) });
+    }
+    const nextIndex = { ...category.data, icons: nextIcons };
+    changes.push({ path: category.path, content: utf8ToBase64(`${JSON.stringify(nextIndex, null, 2)}\n`) });
+    pending.owner = state.owner;
+    pending.repositoryName = state.repositoryName;
+    pending.branch = state.branch;
+    pending.commitSha = state.commitSha;
+    pending.categoryLabel = category.label;
+    pending.categoryPath = category.path;
+    pending.assetDirectory = directory;
+    pending.emptyIndex = category.icons.length === 0;
+    pending.changes = changes;
+    ui.uploadConfirmRepository.value = `${state.owner}/${state.repositoryName}`;
+    ui.uploadConfirmBranch.value = state.branch;
+    ui.uploadConfirmCategory.value = category.path;
+    ui.uploadConfirmIndex.value = category.path;
+    ui.uploadConfirmDirectory.value = directory;
+    ui.uploadConfirmDirectoryNote.textContent = appLanguage === 'en'
+      ? `All selected images will be placed in ${directory}; the preview shows the exact path.`
+      : `所选图片都会放入 ${directory}；下方预览显示每个文件的准确路径。`;
     ui.uploadConfirmFileList.replaceChildren();
-    pending.files.forEach((file) => {
+    fileRows.forEach(({ file, path }) => {
       const item = document.createElement('li');
       const details = document.createElement('div');
       details.className = 'upload-confirm-file-details';
       const name = document.createElement('strong');
       name.textContent = file.name;
-      const path = document.createElement('code');
-      path.textContent = file.path;
+      const targetPath = document.createElement('code');
+      targetPath.textContent = path;
       const size = document.createElement('small');
       size.textContent = formatBytes(file.size);
-      details.append(name, path);
+      details.append(name, targetPath);
       item.append(details, size);
       ui.uploadConfirmFileList.append(item);
     });
     ui.uploadConfirmError.classList.add('hidden');
     ui.uploadConfirmError.textContent = '';
+    ui.uploadConfirmSubmit.disabled = false;
+  }
+
+  async function loadUploadTargetRepository(owner, name, preferredBranch = '') {
+    const generation = ++uploadTargetLoadSequence;
+    uploadTargetState = null;
+    uploadTargetContext = null;
+    ui.uploadConfirmSubmit.disabled = true;
+    ui.uploadConfirmError.classList.add('hidden');
+    const en = appLanguage === 'en';
+    for (const select of [ui.uploadConfirmBranch, ui.uploadConfirmCategory, ui.uploadConfirmIndex, ui.uploadConfirmDirectory]) {
+      select.disabled = true;
+      setUploadSelectOptions(select, [], '', en ? 'Loading…' : '正在读取…');
+    }
+    try {
+      const branches = await fetchUploadTargetBranches(owner, name);
+      if (generation !== uploadTargetLoadSequence || !pendingUploadConfirmation) return;
+      if (!branches.length) throw new Error(en ? 'This repository has no readable branches.' : '此仓库没有可读取的分支。');
+      const repo = uploadTargetRepositories().find((item) => repositoryIdentity(item) === `${owner}/${name}`.toLowerCase());
+      const preferredDefault = repo?.default_branch || (owner.toLowerCase() === selectedOwner.toLowerCase() && name.toLowerCase() === selectedRepoName.toLowerCase() ? branch : '');
+      const chosenBranch = branches.includes(preferredBranch) ? preferredBranch : branches.includes(preferredDefault) ? preferredDefault : branches[0];
+      uploadTargetContext = { owner, repositoryName: name, branches, defaultBranch: preferredDefault };
+      setUploadSelectOptions(ui.uploadConfirmBranch, branches.map((value) => ({ value, label: value })), chosenBranch, '', branches.length === 0);
+      await loadUploadTargetBranch(owner, name, chosenBranch, generation,
+        owner.toLowerCase() === selectedOwner.toLowerCase() && name.toLowerCase() === selectedRepoName.toLowerCase() ? activeCategoryPath : '');
+    } catch (error) {
+      if (generation !== uploadTargetLoadSequence || !pendingUploadConfirmation) return;
+      uploadTargetError(error.message || (en ? 'Could not inspect the selected repository.' : '无法读取所选仓库。'));
+    }
+  }
+
+  async function openUploadConfirmation(pending) {
+    pendingUploadConfirmation = pending;
+    uploadTargetState = null;
+    uploadTargetContext = null;
     renderUploadConfirmationText();
+    const repositories = uploadTargetRepositories();
+    const repoOptions = repositories.map((item) => ({
+      value: `${item.owner.login}/${item.name}`,
+      label: item.full_name || `${item.owner.login}/${item.name}`
+    }));
+    setUploadSelectOptions(ui.uploadConfirmRepository, repoOptions, `${selectedOwner}/${selectedRepoName}`, '', repoOptions.length === 0);
+    ui.uploadConfirmBranch.disabled = true;
+    ui.uploadConfirmCategory.disabled = true;
+    ui.uploadConfirmDirectory.disabled = true;
+    ui.uploadConfirmIndex.disabled = true;
+    ui.uploadConfirmSubmit.disabled = true;
     ui.uploadConfirmModal.classList.remove('hidden');
     requestAnimationFrame(() => ui.uploadConfirmCancel.focus());
+    const [owner, ...nameParts] = ui.uploadConfirmRepository.value.split('/');
+    await loadUploadTargetRepository(owner, nameParts.join('/'), branch);
   }
 
   function closeUploadConfirmation() {
     if (ui.uploadConfirmModal.classList.contains('hidden')) return;
+    uploadTargetLoadSequence += 1;
+    uploadTargetState = null;
+    uploadTargetContext = null;
     ui.uploadConfirmModal.classList.add('hidden');
     pendingUploadConfirmation = null;
     ui.uploadButton.focus({ preventScroll: true });
@@ -4469,36 +4763,48 @@
   async function confirmPendingUpload() {
     const pending = pendingUploadConfirmation;
     if (!pending || busy) return;
-    const category = categories.find((item) => item.path === pending.categoryPath);
     const stillSameFiles = selectedFiles.length === pending.files.length
       && pending.files.every((item, index) => selectedFiles[index] === item.file
         && selectedFileNames[index] === item.selectedName);
-    const stillSameTarget = pending.owner === selectedOwner
-      && pending.repositoryName === selectedRepoName
-      && pending.branch === branch
-      && activeCategoryPath === pending.categoryPath
-      && Boolean(category);
+    const stillSameTarget = uploadTargetState
+      && pending.owner === uploadTargetState.owner
+      && pending.repositoryName === uploadTargetState.repositoryName
+      && pending.branch === uploadTargetState.branch
+      && pending.categoryPath === ui.uploadConfirmCategory.value
+      && pending.categoryPath === ui.uploadConfirmIndex.value
+      && pending.assetDirectory === ui.uploadConfirmDirectory.value
+      && ui.uploadConfirmRepository.value === `${pending.owner}/${pending.repositoryName}`
+      && ui.uploadConfirmBranch.value === pending.branch
+      && pending.changes?.length === pending.files.length + 1;
     if (!stillSameFiles || !stillSameTarget || stagedCategories.size) {
       ui.uploadConfirmError.textContent = appLanguage === 'en'
-        ? 'The upload selection or target changed. Cancel this review and prepare it again; nothing was written.'
-        : '待上传文件或目标位置已变化。请取消本次确认并重新准备；尚未写入任何内容。';
+        ? 'The upload selection or target changed. Review the refreshed preview; nothing was written.'
+        : '待上传文件或目标位置已变化。请检查更新后的预览；尚未写入任何内容。';
       ui.uploadConfirmError.classList.remove('hidden');
       return;
     }
     pendingUploadConfirmation = null;
     ui.uploadConfirmModal.classList.add('hidden');
     setBusy(true);
-    showStatus(appLanguage === 'en' ? 'Writing files and the selected JSON index to GitHub…' : '正在写入 GitHub，并同时更新所选 JSON 索引…', 'info');
+    showStatus(appLanguage === 'en' ? 'Writing the selected image files and JSON index to GitHub…' : '正在按所选目标写入图片文件并同步 JSON 索引…', 'info');
     try {
       const label = pending.files.length === 1 ? pending.files[0].name : `${pending.files.length} ${appLanguage === 'en' ? 'icons' : '个图标'}`;
-      await commitChanges(pending.changes, `Add ${label} to ${pending.categoryLabel}`);
+      await commitChanges(pending.changes, `Add ${label} to ${pending.categoryLabel}`, pending);
       clearSelectedFiles();
-      await loadRepositoryState();
-      showStatus(appLanguage === 'en' ? 'Upload complete: files and the selected JSON index were updated in one commit.' : '上传完成：图标文件和所选 JSON 索引已在同一提交中更新。', 'success');
-      showToast(appLanguage === 'en' ? 'Upload complete; the repository was updated.' : '上传成功，仓库已更新。');
+      if (selectedOwner.toLowerCase() === pending.owner.toLowerCase()
+          && selectedRepoName.toLowerCase() === pending.repositoryName.toLowerCase()
+          && branch === pending.branch) {
+        try { await loadRepositoryState(); } catch { /* The confirmed commit succeeded; the visible library can be refreshed separately. */ }
+      }
+      showStatus(appLanguage === 'en'
+        ? `Upload complete: files and JSON index were updated in ${pending.owner}/${pending.repositoryName} (${pending.branch}).`
+        : `上传完成：已在 ${pending.owner}/${pending.repositoryName}（${pending.branch}）同步图片文件与 JSON 索引。`, 'success');
+      showToast(appLanguage === 'en' ? 'Upload complete; the selected repository was updated.' : '上传成功，所选仓库已更新。');
     } catch (error) {
       showStatus(error.message || (appLanguage === 'en' ? 'Upload failed. Please retry.' : '上传失败，请重试。'), 'error');
     } finally {
+      uploadTargetState = null;
+      uploadTargetContext = null;
       setBusy(false);
     }
   }
@@ -4508,9 +4814,10 @@
     if (stagedCategories.size) return showStatus(appLanguage === 'en' ? 'Save or discard pending index edits before uploading.' : '请先保存或撤销待整理的索引变更，再上传图标。', 'error');
     const category = categories.find((item) => item.path === activeCategoryPath);
     if (!category) return;
-    const incomingNames = new Set();
-    const changes = [];
     const filesForReview = [];
+    const changes = [];
+    const incomingNames = new Set();
+    const assetDirectory = category.assetDirectory || (category.path.includes('/') ? category.path.slice(0, category.path.lastIndexOf('/')) : ICON_ROOT);
     const nextIcons = [...category.icons];
     for (let fileIndex = 0; fileIndex < selectedFiles.length; fileIndex += 1) {
       const file = selectedFiles[fileIndex];
@@ -4524,24 +4831,22 @@
           ? `Invalid upload name “${requestedName}”. Keep the original extension and use 1–120 name characters without slashes.`
           : `上传名称“${requestedName}”无效。请保留原扩展名，名称需为 1–120 个字符且不能含斜线。`);
       }
-      const path = `${category.assetDirectory}/${normalized}`;
+      const content = arrayBufferToBase64(await file.arrayBuffer());
+      const path = `${assetDirectory}/${normalized}`;
       const collisionKey = path.toLocaleLowerCase();
       if (incomingNames.has(collisionKey) || treeFiles.has(path) || [...treeFiles.keys()].some((known) => known.toLocaleLowerCase() === collisionKey)) {
         throw new Error(appLanguage === 'en' ? `“${normalized}” already exists in the repository. Rename it before uploading.` : `仓库中已存在“${normalized}”，请改名后再上传。`);
       }
       incomingNames.add(collisionKey);
-      const base64 = arrayBufferToBase64(await file.arrayBuffer());
-      changes.push({ path, content: base64 });
-      filesForReview.push({ file, name: normalized, selectedName: selectedFileNames[fileIndex], path, size: file.size });
+      changes.push({ path, content });
+      filesForReview.push({ file, name: normalized, selectedName: selectedFileNames[fileIndex], size: file.size, content, path });
       nextIcons.push({ name: baseName, url: GitHubUrls.rawContentUrl(rawContentBaseUrl, selectedOwner, selectedRepoName, branch, path) });
     }
-    const index = { ...category.data, icons: nextIcons };
-    changes.push({ path: category.path, content: utf8ToBase64(`${JSON.stringify(index, null, 2)}\n`) });
-    openUploadConfirmation({
-      owner: selectedOwner, repositoryName: selectedRepoName, branch,
-      categoryLabel: category.label, categoryPath: category.path,
-      assetDirectory: category.assetDirectory, emptyIndex: category.icons.length === 0,
-      files: filesForReview, changes
+    changes.push({ path: category.path, content: utf8ToBase64(`${JSON.stringify({ ...category.data, icons: nextIcons }, null, 2)}\n`) });
+    await openUploadConfirmation({
+      owner: selectedOwner, repositoryName: selectedRepoName, branch, commitSha,
+      categoryLabel: category.label, categoryPath: category.path, assetDirectory,
+      emptyIndex: category.icons.length === 0, files: filesForReview, changes
     });
   }
 
@@ -4837,6 +5142,9 @@
   document.querySelectorAll('.preference-choice-button[data-choice-select]').forEach((button) => {
     button.addEventListener('click', () => openSettingsChoiceDialog(button.dataset.choiceSelect, button));
   });
+  document.querySelectorAll('.upload-target-choice-button[data-choice-select]').forEach((button) => {
+    button.addEventListener('click', () => openUploadTargetChoiceDialog(button.dataset.choiceSelect, button));
+  });
   ui.librarySettingsCta.addEventListener('click', () => setActiveScreen('settings', 'account'));
   ui.settingsPageButtons.forEach((button) => button.addEventListener('click', () => setSettingsPage(button.dataset.settingsPage)));
   ui.settingsSubpageBack.addEventListener('click', () => setSettingsPage('home'));
@@ -4993,6 +5301,10 @@
     if (event.target.matches('[data-cutout-close]')) closeCutoutPreview();
   });
   window.onCueAndroidBackPressed = () => {
+    if (closeChoiceDialog) {
+      closeChoiceDialog();
+      return true;
+    }
     if (!ui.folderOperationModal.classList.contains('hidden')) {
       closeFolderOperation();
       return true;
@@ -5115,6 +5427,39 @@
   });
   ui.uploadConfirmCancel.addEventListener('click', closeUploadConfirmation);
   ui.uploadConfirmClose.addEventListener('click', closeUploadConfirmation);
+  ui.uploadConfirmRepository.addEventListener('change', () => {
+    const [owner, ...nameParts] = ui.uploadConfirmRepository.value.split('/');
+    if (!owner || !nameParts.length) return;
+    loadUploadTargetRepository(owner, nameParts.join('/')).catch((error) => uploadTargetError(error.message || '无法读取所选仓库。'));
+  });
+  ui.uploadConfirmBranch.addEventListener('change', () => {
+    const context = uploadTargetContext;
+    const targetBranch = ui.uploadConfirmBranch.value;
+    if (!context || !targetBranch || !context.branches.includes(targetBranch)) return;
+    const generation = ++uploadTargetLoadSequence;
+    uploadTargetState = null;
+    ui.uploadConfirmSubmit.disabled = true;
+    for (const select of [ui.uploadConfirmCategory, ui.uploadConfirmIndex, ui.uploadConfirmDirectory]) {
+      select.disabled = true;
+      setUploadSelectOptions(select, [], '', appLanguage === 'en' ? 'Loading…' : '正在读取…');
+    }
+    loadUploadTargetBranch(context.owner, context.repositoryName, targetBranch, generation).catch((error) => {
+      if (generation === uploadTargetLoadSequence) uploadTargetError(error.message || '无法读取所选分支。');
+    });
+  });
+  ui.uploadConfirmCategory.addEventListener('change', () => {
+    const path = ui.uploadConfirmCategory.value;
+    ui.uploadConfirmIndex.value = path;
+    updateUploadTargetDirectories(path);
+    refreshUploadPlanPreview();
+  });
+  ui.uploadConfirmIndex.addEventListener('change', () => {
+    const path = ui.uploadConfirmIndex.value;
+    ui.uploadConfirmCategory.value = path;
+    updateUploadTargetDirectories(path);
+    refreshUploadPlanPreview();
+  });
+  ui.uploadConfirmDirectory.addEventListener('change', refreshUploadPlanPreview);
   ui.uploadConfirmSubmit.addEventListener('click', () => {
     confirmPendingUpload().catch((error) => showStatus(error.message || '上传失败，请重试。', 'error'));
   });
@@ -5172,6 +5517,10 @@
   ui.cacheClearButton.addEventListener('click', clearManagedCache);
   ui.searchInput.addEventListener('input', renderIcons);
   document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && closeChoiceDialog) {
+      closeChoiceDialog();
+      return;
+    }
     if (event.key === 'Escape' && !ui.accentEyedropperModal.classList.contains('hidden')) {
       closeAccentEyedropper();
       return;

@@ -23,9 +23,7 @@ IS-Net q8 权重随 APK 打包（约 44.4 MB），来源及 Apache-2.0 许可证
 设置支持简体中文/English，以及跟随系统、浅色、深色外观；偏好保存在本机。应用图标选择位于「设置 → 外观」，提供奶油香槟金、冰川蓝、樱花粉和深蓝鎏金四款原创棱镜切面图标；Android 8.0 及以上使用自适应前景/背景图层，Android 13 及以上提供单色图层，旧版使用圆形位图回退。桌面/应用抽屉选择会启用对应 launcher alias；应用「信息」固定使用奶油香槟金默认/圆形图标。图片裁切支持单指平移、双指缩放；预览采用低分辨率缓存，最终导出仍从原图按同一选区生成。支持 PNG、JPG/JPEG、GIF、WebP、AVIF；单个文件最大 12 MB，单次选择合计不超过 24 MB。GIF 抠图按首帧处理。
 
 ## 安装与构建
-
-1.1.4 调试 APK：在 [GitHub Releases](https://github.com/Miko6677/icon-library-manager/releases/latest) 下载。APK 使用调试签名，适合个人测试。
-
+1.1.8 调试 APK：在 [GitHub Releases](https://github.com/Miko6677/icon-library-manager/releases/latest) 下载。APK 使用调试签名，适合个人测试。
 需要 JDK 17 或更高版本和 Android SDK platform 35。在项目根目录执行：
 
 ```sh
