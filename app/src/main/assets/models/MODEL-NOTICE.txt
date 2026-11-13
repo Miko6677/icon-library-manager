@@ -1,0 +1,29 @@
+Models shipped in this app
+===========================
+
+IS-Net general-use q8 ONNX
+- File: isnet-general-use-q8.onnx
+- Source: https://huggingface.co/SacredNoir/isnet-general-use-onnx
+- Official upstream project: https://github.com/xuebinqin/DIS
+- License: Apache-2.0 (full upstream license in IS-NET-LICENSE.txt)
+- SHA-256: feed6f32a5e707ca7e939576b2d891b23fb9eb4114749657a5efc64e8651e43a
+- Model card interface: input `input`, RGB float32 NCHW, 1 x 3 x 1024 x 1024,
+  normalized as (pixel - 128) / 256; first saliency output `output` is in 0..1.
+- The app uses the model's dynamic spatial axes at 512 x 512 with the same
+  normalization to reduce peak native memory on phones. The q8 model card's
+  default/reference size is 1024 x 1024; 512 x 512 is a deliberate memory/edge-
+  detail tradeoff. The app upsamples the mask to the source image and can load
+  MobileSAM on demand for point-based refinement.
+
+MobileSAM quantized ONNX
+- Files: mobile_sam.encoder.quant.onnx
+  sam_vit_h_4b8939.decoder.quant.onnx
+- Source: https://huggingface.co/vietanhdev/segment-anything-onnx-models
+- Upstream project: https://github.com/ChaoningZhang/MobileSAM
+- License: Apache-2.0 (full upstream license in MobileSAM-LICENSE.txt)
+- The encoder/decoder sessions are loaded only after the user adds a refinement
+  point. The encoder is released after image embedding; sessions are released
+  when the refinement state is cancelled or the app screen is destroyed.
+
+All model inference runs locally. User-selected images and masks are not sent
+ to the model publisher or any inference service.

@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://raw.githubusercontent.com; connect-src https://api.github.com; base-uri 'none'; form-action 'none'; frame-ancestors 'none'">
+  <meta name="referrer" content="no-referrer">
+  <title>图标库管理</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./github-url-config.js" defer></script>
+  <script src="./accent-color.js" defer></script>
+  <script src="./dialogs.js" defer></script>
+  <script src="./folder-operations.js" defer></script>
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="topbar">
+      <div class="brand">
+        <button id="settings-subpage-back" class="topbar-back-button hidden" type="button" aria-label="返回设置主页" title="返回设置主页"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7"/></svg></button>
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none"><rect x="3" y="3" width="11" height="11" rx="3" fill="currentColor"/><rect x="18" y="3" width="11" height="11" rx="3" fill="currentColor" opacity=".62"/><rect x="3" y="18" width="11" height="11" rx="3" fill="currentColor" opacity=".62"/><rect x="18" y="18" width="11" height="11" rx="3" fill="currentColor"/></svg>
+        </span>
+        <a class="brand-copy" href="#top" aria-label="图标库管理首页"><strong>图标库</strong><small>管理台</small></a>
+      </div>
+      <div class="repo-chip"><span class="repo-dot"></span><span id="repo-chip-label">尚未选择图标库</span><a id="current-repo-link" class="hidden" target="_blank" rel="noopener noreferrer"></a></div>
+      <div class="top-actions">
+        <span id="connection-state" class="connection-state"><i></i>未连接</span>
+      </div>
+    </header>
+
+    <main id="top">
+      <div id="library-screen" class="app-screen">
+      <div class="screen-content">
+      <section class="intro-row">
+        <div>
+          <div class="eyebrow"><span class="eyebrow-line"></span>REPOSITORY TOOL</div>
+          <h1>管理你的图标库<span class="title-period">.</span></h1>
+          <p class="intro-copy">在一个地方上传图标、整理分类，或移除不再需要的文件。</p>
+        </div>
+        <div class="intro-note"><span class="sparkle" aria-hidden="true">✳</span><span>上传与索引将一起保存为一次 GitHub 提交</span></div>
+      </section>
+
+      <section id="library-setup-prompt" class="library-setup-prompt hidden" role="status"><div class="section-kicker">图标库尚未连接</div><h2>先在设置里连接 GitHub</h2><p>Token 和仓库选择都集中在设置中。应用只会列出当前 Token 可访问的仓库，不会预设仓库或索引地址。</p><button id="library-settings-cta" class="button button-primary" type="button">打开设置并连接 →</button></section>
+      <section id="workspace" class="workspace hidden" aria-label="图标库管理区">
+        <aside class="sidebar">
+          <div class="side-section">
+            <div class="side-label"><span>图标分类 <span class="side-count" id="category-count">0</span></span><button id="create-folder-button" class="folder-create-button" type="button">＋ 新建文件夹</button></div>
+            <nav id="category-browser-navigation" class="category-browser-navigation hidden" aria-label="分类文件夹导航">
+              <button id="category-browser-back" class="category-browser-back" type="button" aria-label="返回上一级文件夹">‹</button>
+              <div id="category-breadcrumbs" class="category-breadcrumbs" role="group" aria-label="当前文件夹路径"></div>
+            </nav>
+            <div id="category-list" class="category-list" role="region" aria-label="文件夹与 JSON 索引" tabindex="0" aria-describedby="category-scroll-hint"></div>
+            <p id="category-scroll-hint" class="category-scroll-hint hidden">↔ 左右滑动查看更多</p>
+            <p id="category-browser-empty" class="category-browser-empty hidden" role="status">此文件夹中没有子文件夹或有效 JSON 索引。</p>
+          </div>
+          <div class="side-tip"><span class="tip-symbol" aria-hidden="true">↗</span><div><strong>安全提示</strong><p>使用仓库范围的细粒度令牌。不要将令牌发给他人或粘贴到其他网页。</p></div></div>
+          <a class="side-link" href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener noreferrer">管理 GitHub tokens <span aria-hidden="true">↗</span></a>
+        </aside>
+
+        <div class="main-panel">
+          <section id="index-select-prompt" class="index-select-prompt" role="status"><div id="index-select-kicker" class="section-kicker">任务 3 / 3 · 选择 JSON 索引</div><h2 id="index-select-title">先选择要管理的分类索引</h2><p id="index-select-help">在左侧按仓库文件夹逐层浏览；只有有效 JSON 索引可选。每个索引彼此独立，上传、改名和整理只会更新选中的那份 JSON。</p></section>
+          <div id="staged-actions" class="staged-actions hidden"><span id="staged-count">有待保存的整理操作</span><button id="discard-staged" class="button button-quiet" type="button">撤销更改</button><button id="save-staged" class="button button-primary" type="button">检查并提交</button></div>
+          <div id="staged-moves" class="staged-moves hidden" aria-live="polite"></div>
+          <div id="category-editor" class="hidden">
+          <div class="panel-heading">
+            <div><div class="section-kicker" id="selected-kicker">图标分类</div><h2 id="selected-title">请选择分类</h2><p id="selected-description" class="category-description"></p><div class="category-heading-actions"><button id="rename-category" class="button button-quiet category-rename" type="button">重命名分类</button><a id="raw-index-link" class="button button-quiet raw-index-link" target="_blank" rel="noopener noreferrer">查看 JSON 索引 ↗</a></div></div>
+            <div class="panel-meta"><span class="branch-pill"><span class="branch-icon" aria-hidden="true">⑂</span><span id="branch-label">main</span></span><span class="sync-label"><i></i>已连接 GitHub</span><button id="library-refresh-button" class="button button-outline library-refresh-button" type="button">刷新当前图标库</button></div>
+          </div>
+
+          <div class="upload-box">
+            <div class="upload-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5M4 15.5v3A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div class="upload-copy"><strong>添加图标到此分类</strong><span>支持 PNG、JPG、GIF、WebP、AVIF · 单个文件最大 12 MB · 上传前可改名</span></div>
+            <input id="file-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" multiple hidden>
+            <button id="choose-files" class="button button-outline" type="button">选择文件</button>
+            <div id="selected-files" class="selected-files hidden"></div>
+            <button id="upload-button" class="button button-primary upload-submit hidden" type="button">上传并保存 <span aria-hidden="true">→</span></button>
+          </div>
+
+          <div class="list-toolbar">
+            <div class="list-title"><h3>已收录图标</h3><span id="icon-count" class="count-badge">0</span></div>
+            <label class="search-box" for="search-input"><span aria-hidden="true">⌕</span><input id="search-input" type="search" placeholder="搜索名称…" autocomplete="off"><kbd>/</kbd></label>
+          </div>
+          <div id="status-message" class="status-message hidden" role="status"></div>
+          <div id="icon-grid" class="icon-grid"></div>
+          <div id="empty-state" class="empty-state hidden"><div class="empty-graphic" aria-hidden="true"><span></span><span></span><span></span><span></span></div><strong id="empty-title">这里还没有图标</strong><p id="empty-description">选择图片上传，它们会自动加入这个分类的索引。</p></div>
+          </div>
+        </div>
+      </section>
+      </div>
+      </div>
+
+      <section id="cutout-screen" class="app-screen hidden" aria-label="本机抠图">
+        <div class="cutout-home-card">
+          <div class="section-kicker">本机处理 · 图片不上传</div>
+          <h1>选择照片，开始抠图<span class="title-period">.</span></h1>
+          <p>从手机相册选一张图片，先用本机模型自动抠图；需要时再点选或用笔刷精修。确认后可将原图或透明版加入图标库上传队列。</p>
+          <button id="cutout-gallery-select" class="button button-primary gallery-select-button" type="button"><span aria-hidden="true">▧</span>从相册选择</button>
+          <input id="gallery-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/avif" hidden>
+          <div class="gallery-privacy-note"><span aria-hidden="true">⌑</span>照片只在此设备上处理；不会发送到模型服务。</div>
+        </div>
+      </section>
+
+      <section id="settings-screen" class="app-screen hidden" aria-label="设置">
+        <div id="settings-home" class="settings-home">
+        <div id="settings-index" class="settings-index-grid">
+          <button class="settings-index-card" type="button" data-settings-page="appearance"><span class="settings-index-glyph settings-glyph-appearance" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M4.05 4.05l1.42 1.42m13.06 13.06 1.42 1.42M2.5 12h2m15 0h2M4.05 19.95l1.42-1.42M18.53 5.47l1.42-1.42"/></svg></span><span class="settings-index-copy"><strong id="settings-card-appearance">外观</strong><small id="settings-card-appearance-summary">主题、系统取色与语言</small></span><span class="settings-card-chevron" aria-hidden="true">›</span></button>
+          <button class="settings-index-card" type="button" data-settings-page="navigation"><span class="settings-index-glyph settings-glyph-navigation" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="3"/><path d="M4 15.5h16M8 18h.01M12 18h.01M16 18h.01"/></svg></span><span class="settings-index-copy"><strong id="settings-card-navigation">导航与布局</strong><small id="settings-card-navigation-summary">底部栏位置、标签与滚动行为</small></span><span class="settings-card-chevron" aria-hidden="true">›</span></button>
+          <button class="settings-index-card" type="button" data-settings-page="cache"><span class="settings-index-glyph settings-glyph-cache" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="7.5" ry="2.7"/><path d="M4.5 5v6c0 1.5 3.4 2.8 7.5 2.8s7.5-1.3 7.5-2.8V5M4.5 11v6c0 1.5 3.4 2.8 7.5 2.8 1 0 2-.1 2.9-.3M19.5 11v3.1"/><path d="M18 17.2v4m-2-2h4"/></svg></span><span class="settings-index-copy"><strong id="settings-card-cache">缓存管理</strong><small id="settings-card-cache-summary">查看占用并清理本机缓存</small></span><span class="settings-card-chevron" aria-hidden="true">›</span></button>
+          <button class="settings-index-card settings-index-card-account" type="button" data-settings-page="account"><span class="settings-index-glyph settings-glyph-account" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.3"/><path d="M5.2 19.5c.7-3.1 3.1-4.7 6.8-4.7s6.1 1.6 6.8 4.7"/></svg></span><span class="settings-index-copy"><strong id="settings-card-account">GitHub 账号与仓库</strong><small id="settings-card-account-summary">Token、连接验证与仓库选择</small></span><span class="settings-card-chevron" aria-hidden="true">›</span></button>
+          <button class="settings-index-card" type="button" data-settings-page="about"><span class="settings-index-glyph settings-glyph-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 7.4 13.3 10l2.9.4-2.1 2 .5 2.9-2.6-1.4-2.6 1.4.5-2.9-2.1-2 2.9-.4L12 7.4Z"/></svg></span><span class="settings-index-copy"><strong id="settings-card-about">关于</strong><small id="settings-card-about-summary">应用版本与使用引导</small></span><span class="settings-card-chevron" aria-hidden="true">›</span></button>
+        </div>
+        </div>
+        <section id="settings-subpage" class="settings-subpage hidden">
+          <section id="settings-account-page" class="settings-subpage-content hidden">
+            <section id="settings-connection-summary" class="settings-connection-summary hidden">
+              <div><div class="section-kicker">GitHub 连接</div><h2 id="settings-current-repo">尚未选择图标库</h2><p id="cached-repository-help">可在本机缓存的仓库之间切换；刷新用于查找新仓库。</p></div>
+              <div class="settings-connection-actions"><button id="settings-change-repo" class="button button-outline" type="button">更换仓库</button><button id="repo-refresh-button" class="button button-outline" type="button">刷新仓库列表</button><button id="disconnect-button" class="button button-quiet hidden" type="button">断开并忘记</button></div>
+            </section>
+            <details id="github-endpoints-disclosure" class="settings-disclosure">
+              <summary class="settings-disclosure-summary"><span><strong id="github-endpoints-summary-title">高级连接地址</strong><small id="github-endpoints-summary-help">仅在使用可信代理或镜像时修改。</small></span><span class="settings-disclosure-arrow" aria-hidden="true">⌄</span></summary>
+              <div class="settings-disclosure-body"><section class="endpoint-settings-card" aria-labelledby="github-endpoints-title">
+              <div class="section-kicker">GITHUB · 访问地址</div><h3 id="github-endpoints-title">GitHub 访问地址</h3>
+              <label for="github-api-base">GitHub API 基址</label><input id="github-api-base" type="url" value="https://api.github.com" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false">
+              <p id="github-api-warning" class="endpoint-warning">连接测试及 API 请求会把你的 PAT 放在 Authorization 请求头发送到此主机。自定义时只使用可信的 HTTPS 代理或镜像。</p>
+              <label for="github-raw-base">图标与 raw 内容基址</label><input id="github-raw-base" type="url" value="https://raw.githubusercontent.com" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false">
+              <p id="github-raw-help" class="endpoint-help">应用会在基址后追加所选仓库、分支和文件路径。图片/raw 请求由 WebView 直接加载，不附带 PAT；自定义主机仍可看到请求的资源路径。</p>
+              <div class="endpoint-actions"><button id="test-github-endpoints" class="button button-primary" type="button">测试 GitHub API 连接</button><button id="save-github-endpoints" class="button button-outline" type="button">保存地址</button><button id="restore-github-endpoints" class="button button-quiet" type="button">恢复默认值</button></div>
+              <div id="github-endpoint-status" class="endpoint-status hidden" role="status" aria-live="polite"></div>
+              </section></div>
+            </details>
+            <section id="saved-token-card" class="saved-token-card hidden" aria-label="本机已保存的 GitHub Token">
+              <div class="saved-token-copy"><strong id="saved-token-title">Token 已在本机加密保存</strong><small id="saved-token-help">默认遮蔽；显示或复制只在你点击时执行。</small></div>
+              <div class="saved-token-value-row"><input id="saved-token-display" type="password" readonly autocomplete="off" spellcheck="false" aria-label="本机保存的 GitHub Token"><button id="toggle-saved-token" class="show-token" type="button" aria-label="显示或隐藏已保存的 Token">显示</button><button id="copy-saved-token" class="show-token" type="button">复制</button></div>
+              <div class="saved-token-actions"><button id="saved-token-replace-toggle" class="button button-outline" type="button">替换 Token</button></div>
+              <div id="saved-token-replace-panel" class="saved-token-replace hidden">
+                <label for="saved-token-replacement" id="saved-token-replacement-label">新的 GitHub 个人访问令牌</label>
+                <div class="token-field"><input id="saved-token-replacement" type="password" autocomplete="new-password" autocapitalize="none" spellcheck="false" placeholder="github_pat_••••••••••••"><button id="toggle-saved-token-replacement" class="show-token" type="button">显示</button></div>
+                <p id="saved-token-replace-help">新 Token 会先通过当前配置的 GitHub API 地址验证；成功后才加密替换并保存在本机。</p>
+                <div class="saved-token-replace-actions"><button id="saved-token-replace-cancel" class="button button-quiet" type="button">取消</button><button id="saved-token-replace-submit" class="button button-primary" type="button">验证并替换 Token</button></div>
+              </div>
+              <div id="saved-token-status" class="saved-token-status hidden" role="status" aria-live="polite"></div>
+              <a id="saved-token-settings-link" class="token-help-link" href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener noreferrer">管理 GitHub 个人访问令牌 ↗</a>
+            </section>
+            <section id="connect-panel" class="connect-panel">
+              <div class="connect-art" aria-hidden="true"><div class="orbit orbit-one"></div><div class="orbit orbit-two"></div><div class="art-card art-card-back"><span></span><span></span><span></span></div><div class="art-card art-card-front"><div class="mini-grid"><i></i><i></i><i></i><i></i></div><b>+</b></div><div class="art-spark spark-a">✦</div><div class="art-spark spark-b">✳</div></div>
+              <div class="connect-content"><div class="section-kicker">GitHub · 连接 Token</div><h2>连接你的 GitHub</h2><p>输入 Token 后，应用只会列出该 Token 可访问的仓库，再由你选择要管理的图标库。浏览需要读取权限；上传、删除或整理时才需要 Contents 写权限。</p>
+                <div class="credential-card"><form id="connect-form" autocomplete="off"><label for="token-input">GitHub 个人访问令牌</label><div class="token-field"><input id="token-input" name="token" type="password" placeholder="github_pat_••••••••••••" autocomplete="new-password" spellcheck="false" required><button type="button" id="toggle-token" class="show-token" aria-label="显示或隐藏 token">显示</button></div><button id="connect-button" class="button button-primary connect-submit" type="submit"><span>验证 Token 并加载可访问仓库</span><span aria-hidden="true">→</span></button></form>
+                  <p id="credential-help" class="credential-help">验证后会动态列出此 Token 可访问的仓库，并在本机加密保存。浏览只需读取权限；只有提交仓库内容变更时才需要 Contents 写权限。</p><a id="token-help-link" class="token-help-link" href="https://github.com/settings/personal-access-tokens" target="_blank" rel="noopener noreferrer">管理 GitHub 个人访问令牌 ↗</a><div id="connect-error" class="inline-error hidden" role="alert"></div><button id="forget-token-button" class="button button-quiet hidden" type="button">清除本机保存的 Token</button><div class="privacy-note"><span class="lock-icon" aria-hidden="true">⌑</span><span>Token 仅用于请求 GitHub API；若保存，会使用 Android Keystore 加密并只存于本机应用私有空间，不会发送给其他服务。</span></div>
+                </div>
+              </div>
+            </section>
+            <section id="repo-picker-panel" class="repo-picker-panel hidden" aria-label="选择图标库"><div class="repo-picker-heading"><div><div class="section-kicker">GitHub · 选择图标库</div><h2>选择一个可访问的仓库</h2><p id="repo-picker-help">可直接切换本机缓存的仓库；仅刷新时会从 GitHub 查找新库。</p></div><button id="repo-picker-back" class="button button-quiet" type="button">返回连接步骤</button></div><div id="repo-picker-error" class="inline-error hidden" role="alert"></div><div id="repo-list" class="repo-list"></div><button id="repo-picker-reload" class="button button-outline" type="button">刷新仓库列表</button></section>
+          </section>
+          <section id="settings-appearance-page" class="settings-subpage-content hidden"><section class="settings-preferences">
+            <section class="preference-group"><div class="preference-group-heading"><strong id="language-group-title">语言</strong><p id="language-group-help">选择应用界面使用的语言。</p></div><div class="preference-row"><span><strong id="language-row-title">界面语言</strong><small id="language-row-help">立即应用并保存在本机。</small></span><select id="language-select" class="native-choice-select" aria-hidden="true" tabindex="-1"><option value="zh-CN">简体中文</option><option value="en">English</option></select><button id="language-choice-button" class="preference-choice-button" type="button" data-choice-select="language-select" aria-haspopup="dialog" aria-controls="settings-choice-modal">简体中文</button></div></section>
+            <section class="preference-group"><div class="preference-group-heading"><strong id="appearance-group-title">外观</strong><p id="appearance-group-help">跟随系统会在系统浅色/深色模式变化时自动切换。</p></div><div class="preference-row"><span><strong id="appearance-row-title">主题</strong><small id="appearance-row-help">可跟随系统，也可固定选择浅色或深色。</small></span><select id="appearance-select" class="native-choice-select" aria-hidden="true" tabindex="-1"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select><button id="appearance-choice-button" class="preference-choice-button" type="button" data-choice-select="appearance-select" aria-haspopup="dialog" aria-controls="settings-choice-modal">跟随系统</button></div><label class="preference-row preference-toggle-row" for="black-background-toggle"><span><strong id="black-background-title">深色模式使用纯黑背景</strong><small id="black-background-help">仅在深色模式生效；状态栏和导航栏会同步。</small></span><input id="black-background-toggle" type="checkbox"></label><label class="preference-row preference-toggle-row" for="system-color-toggle"><span><strong id="system-color-title">系统取色</strong><small id="system-color-help">使用 Android 壁纸生成的动态强调色。</small></span><input id="system-color-toggle" type="checkbox" aria-describedby="system-color-note"></label><p id="system-color-note" class="preference-note hidden" role="status"></p></section><section class="preference-group accent-color-group"><div class="preference-group-heading"><strong id="accent-color-title">强调色</strong><p id="accent-color-help">选择柔和的强调色，或从桌面壁纸与相册图片取色；设置会在浅色、深色主题下自动调整明暗。</p></div><div id="accent-color-choices" class="accent-color-choices" role="group" aria-label="选择强调色">
+<button class="accent-color-choice" type="button" data-accent-color="" aria-pressed="false"><span class="accent-color-swatch" style="--swatch-color:#897fb5"></span><span id="accent-name-default">雾紫</span></button>
+<button class="accent-color-choice" type="button" data-accent-color="#7899c5" aria-pressed="false"><span class="accent-color-swatch" style="--swatch-color:#7899c5"></span><span id="accent-name-glacier">冰川蓝</span></button>
+<button class="accent-color-choice" type="button" data-accent-color="#c27b96" aria-pressed="false"><span class="accent-color-swatch" style="--swatch-color:#c27b96"></span><span id="accent-name-sakura">樱花粉</span></button>
+<button class="accent-color-choice" type="button" data-accent-color="#789985" aria-pressed="false"><span class="accent-color-swatch" style="--swatch-color:#789985"></span><span id="accent-name-mint">薄荷绿</span></button>
+<button class="accent-color-choice" type="button" data-accent-color="#cc956d" aria-pressed="false"><span class="accent-color-swatch" style="--swatch-color:#cc956d"></span><span id="accent-name-cream">奶油杏</span></button>
+<button class="accent-color-choice" type="button" data-accent-color="#679598" aria-pressed="false"><span class="accent-color-swatch" style="--swatch-color:#679598"></span><span id="accent-name-sea">海盐青</span></button>
+<button class="accent-color-choice" type="button" data-accent-color="#818b99" aria-pressed="false"><span class="accent-color-swatch" style="--swatch-color:#818b99"></span><span id="accent-name-cloud">云雾灰</span></button>
+</div><div class="accent-current-preview"><span id="accent-current-swatch" class="accent-current-swatch" aria-hidden="true"></span><span class="accent-current-copy"><strong id="accent-current-title">实际预览强调色</strong><small id="accent-current-label">雾紫预设</small><small id="accent-selected-copy">所选颜色：#897FB5</small></span><code id="accent-current-value">#897FB5</code></div><div class="accent-image-actions"><button id="use-wallpaper-color" class="button button-outline" type="button">选择壁纸代表色</button><button id="choose-theme-image" class="button button-outline" type="button">点选相册图片像素</button><input id="theme-image-input" type="file" accept="image/*" hidden></div><div id="wallpaper-accent-choices" class="wallpaper-accent-choices hidden" role="group" aria-label="选择 Android 壁纸代表色"></div><p id="accent-color-status" class="preference-note" role="status" aria-live="polite"></p><p id="accent-color-note" class="settings-page-help">壁纸只读取 Android 安全提供的主色、次色和第三代表色，点选其中一个；普通应用不能读取壁纸像素。相册图片支持点按/拖动吸管取原图单个像素，图片只在本机处理，不上传也不申请照片库权限。取色后点“保存设置”应用。</p></section>
+            <section class="settings-preferences launcher-icon-section"><div class="section-kicker" id="launcher-icon-kicker">启动器图标</div><h3 id="launcher-icon-heading">选择桌面图标</h3><p id="launcher-icon-help" class="settings-page-help">在此切换桌面/应用抽屉图标；Android「应用信息」固定使用奶油香槟金默认/圆形图标。部分桌面可能稍后刷新。</p><div class="launcher-icon-grid">
+            <button class="launcher-icon-choice" type="button" data-launcher-icon="cream" aria-pressed="false"><img src="icons/icon_cream.png" alt=""><span><strong id="icon-name-cream">奶油香槟金</strong><small id="icon-description-cream">香槟金切面水晶</small></span></button>
+            <button class="launcher-icon-choice" type="button" data-launcher-icon="glacier" aria-pressed="false"><img src="icons/icon_glacier.png" alt=""><span><strong id="icon-name-glacier">冰川蓝</strong><small id="icon-description-glacier">冰川蓝透明棱镜</small></span></button>
+            <button class="launcher-icon-choice" type="button" data-launcher-icon="cherry" aria-pressed="false"><img src="icons/icon_cherry.png" alt=""><span><strong id="icon-name-cherry">樱花粉</strong><small id="icon-description-cherry">樱粉玻璃棱镜</small></span></button>
+            <button class="launcher-icon-choice" type="button" data-launcher-icon="bluegold" aria-pressed="false"><img src="icons/icon_bluegold.png" alt=""><span><strong id="icon-name-bluegold">深蓝·鎏金</strong><small id="icon-description-bluegold">深蓝棱镜与独立金色切面</small></span></button>
+          </div><p id="launcher-icon-status" class="preference-note" role="status"></p></section>
+            <div class="settings-preferences-actions"><button class="settings-save button button-primary" type="button" data-i18n="saveSettings">保存设置</button></div></section>
+          </section>
+          <section id="settings-navigation-page" class="settings-subpage-content hidden"><section class="settings-preferences"><section class="preference-group"><div class="preference-group-heading"><strong id="navigation-group-title">导航</strong><p id="navigation-group-help">选择底部导航的位置、显示方式和滚动行为。</p></div><div class="preference-row"><span><strong id="nav-layout-title">底部导航布局</strong><small id="nav-layout-help">固定贴底，或悬浮在页面下方。</small></span><select id="nav-layout-select" class="native-choice-select" aria-hidden="true" tabindex="-1"><option value="fixed">固定</option><option value="floating">悬浮</option></select><button id="nav-layout-choice-button" class="preference-choice-button" type="button" data-choice-select="nav-layout-select" aria-haspopup="dialog" aria-controls="settings-choice-modal">固定</button></div><label class="preference-row preference-toggle-row" for="nav-labels-toggle"><span><strong id="nav-labels-title">显示底部导航文字</strong><small id="nav-labels-help">关闭后保留图标；按钮仍带有无障碍名称。</small></span><input id="nav-labels-toggle" type="checkbox" checked></label><label class="preference-row preference-toggle-row" for="nav-autohide-toggle"><span><strong id="nav-autohide-title">向下滚动时自动隐藏</strong><small id="nav-autohide-help">向上滚动或回到页面顶部时重新显示。</small></span><input id="nav-autohide-toggle" type="checkbox"></label></section><div class="settings-preferences-actions"><button class="settings-save button button-primary" type="button" data-i18n="saveSettings">保存设置</button></div></section></section>
+          <section id="settings-cache-page" class="settings-subpage-content hidden"><div class="cache-overview"><div><div class="section-kicker" id="cache-overview-kicker">缓存占用</div><strong id="cache-total-size">—</strong><small id="cache-total-caption">图片临时副本、远程图标、仓库清单与各仓库图标库快照</small></div><button id="cache-refresh-button" class="button button-outline" type="button">刷新</button></div><section class="cache-details-card"><div class="cache-detail-heading"><strong id="cache-details-title">本机缓存明细</strong><p id="cache-details-help">临时照片副本会在 7 天后清理；远程图标在本机缓存最多 7 天，刷新图标库会重新下载。</p></div><div class="cache-usage-row"><span><strong id="cache-images-title">临时照片副本</strong><small id="cache-image-count">—</small></span><strong id="cache-image-usage">—</strong></div><div class="cache-usage-row"><span><strong id="cache-remote-images-title">远程图标缓存</strong><small id="cache-remote-image-count">—</small></span><strong id="cache-remote-image-usage">—</strong></div><div class="cache-usage-row"><span><strong id="cache-repositories-title">仓库清单</strong><small id="cache-repository-count">—</small></span><strong id="cache-repository-usage">—</strong></div><div class="cache-usage-row"><span><strong id="cache-library-title">图标库快照</strong><small id="cache-library-count">—</small></span><strong id="cache-library-usage">—</strong></div></section><div id="cache-status" class="cache-status hidden" role="status" aria-live="polite"></div><button id="cache-clear-button" class="button button-danger cache-clear-button" type="button">清理列出的缓存</button><p id="cache-clear-help" class="cache-clear-help">会删除本机临时照片副本、远程图标缓存、仓库清单和各仓库图标库快照；不会删除 GitHub 文件、Token、当前仓库选择或其他设置。清除快照后，打开相应图标库需要联网重新加载。</p></section>
+          <section id="settings-about-page" class="settings-subpage-content hidden"><section class="about-version-card"><div class="about-version-row"><span><strong id="about-version-title">应用版本</strong><small id="about-version-help">当前安装版本</small></span><strong id="about-version-value">—</strong></div></section><section class="settings-guide-action about-guide-card"><span class="settings-guide-icon" aria-hidden="true">?</span><span><strong id="about-guide-title">使用引导</strong><small id="guide-settings-note">查看连接仓库、抠图与图标管理的分步说明。</small></span><button id="reopen-guide-button" class="button button-outline" type="button">重新打开使用引导</button></section></section>
+        </section>
+      </section>
+    </main>
+
+    <footer class="footer"><span>图标库管理 · 直接与你选择的 GitHub 仓库交互</span><span>Token 使用 Android Keystore 加密保存在本机</span></footer>
+  </div>
+  <nav id="bottom-navigation" class="bottom-navigation" aria-label="主导航">
+    <button class="bottom-nav-item active" type="button" data-screen="library" aria-current="page"><span class="bottom-nav-icon" aria-hidden="true">▦</span><span data-nav-label="library">图标库</span></button>
+    <button class="bottom-nav-item" type="button" data-screen="cutout"><span class="bottom-nav-icon" aria-hidden="true">◩</span><span data-nav-label="cutout">抠图</span></button>
+    <button class="bottom-nav-item" type="button" data-screen="settings"><span class="bottom-nav-icon" aria-hidden="true">⚙</span><span data-nav-label="settings">设置</span></button>
+  </nav>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="app-confirm-modal" class="app-confirm-modal hidden" role="dialog" aria-modal="true" aria-labelledby="app-confirm-title" aria-describedby="app-confirm-message">
+    <div class="app-confirm-backdrop" data-confirm-cancel></div>
+    <section class="app-confirm-card"><div class="section-kicker" id="app-confirm-kicker">本机确认</div><h2 id="app-confirm-title">请确认操作</h2><p id="app-confirm-message"></p><div class="app-confirm-actions"><button id="app-confirm-cancel" class="button button-quiet" type="button">取消</button><button id="app-confirm-accept" class="button button-primary" type="button">继续</button></div></section>
+  </div>
+  <div id="settings-choice-modal" class="settings-choice-modal hidden" role="dialog" aria-modal="true" aria-labelledby="settings-choice-title">
+    <div class="settings-choice-backdrop" data-settings-choice-close></div>
+    <section class="settings-choice-card"><header><div><div class="section-kicker">本机偏好</div><h2 id="settings-choice-title">选择选项</h2></div><button id="settings-choice-close" class="cutout-close" type="button" aria-label="关闭" data-settings-choice-close>×</button></header><div id="settings-choice-options" class="settings-choice-options" role="radiogroup"></div></section>
+  </div>
+  <div id="walkthrough-modal" class="walkthrough-modal hidden" role="dialog" aria-modal="true" aria-labelledby="walkthrough-title">
+    <div class="walkthrough-backdrop"></div>
+    <section class="walkthrough-card">
+      <div class="walkthrough-mark" aria-hidden="true">✦</div>
+      <div id="walkthrough-progress" class="section-kicker">首次使用 · 第 1 步，共 10 步</div>
+      <div id="walkthrough-visual" class="walkthrough-visual" role="img" aria-label="使用步骤界面示意图"></div>
+      <h2 id="walkthrough-title">连接 GitHub</h2>
+      <p id="walkthrough-description"></p>
+      <div class="walkthrough-actions"><button id="walkthrough-skip" class="button button-quiet" type="button">跳过此步</button><button id="walkthrough-next" class="button button-primary" type="button">下一步</button></div>
+    </section>
+  </div>
+  <div id="cutout-modal" class="cutout-modal hidden" role="dialog" aria-modal="true" aria-labelledby="cutout-title">
+    <div class="cutout-backdrop" data-cutout-close></div>
+    <section class="cutout-card">
+      <header class="cutout-heading">
+        <div><div id="cutout-kicker" class="section-kicker">本机处理 · 自动抠图</div><h2 id="cutout-title">自动抠图预览</h2></div>
+        <button id="cutout-close" class="cutout-close" type="button" aria-label="关闭预览">×</button>
+      </header>
+      <p class="cutout-description">先自动生成透明预览；如需精修，可点主体或背景按需加载 MobileSAM 修正，也可用笔刷擦除/恢复局部或添加白色贴纸描边。图片始终在本机处理，GIF 按首帧处理。</p>
+      <div class="cutout-photo-reselect"><button id="cutout-change-photo" class="button button-outline" type="button">从相册换一张</button></div>
+      <div class="cutout-point-tools"><button id="cutout-positive-mode" class="button button-primary" type="button" aria-pressed="true">点主体 · 精修</button><button id="cutout-negative-mode" class="button button-outline" type="button" aria-pressed="false" disabled>点背景 · 移除</button><button id="cutout-erase-mode" class="button button-outline" type="button" aria-pressed="false" disabled>手动擦除</button><button id="cutout-restore-mode" class="button button-outline" type="button" aria-pressed="false" disabled>手动恢复</button><button id="cutout-clear-points" class="button button-quiet" type="button" disabled>恢复自动结果</button><span id="cutout-progress" role="status">正在本机自动抠图…</span></div>
+      <div class="cutout-brush-controls">
+        <label class="cutout-brush-size" for="cutout-brush-size"><span id="cutout-brush-size-title">笔刷大小</span><strong id="cutout-brush-size-value">28 px</strong><input id="cutout-brush-size" type="range" min="10" max="72" step="2" value="28" aria-label="笔刷大小"></label>
+        <div class="cutout-history"><button id="cutout-undo" class="button button-outline" type="button" disabled>撤销</button><button id="cutout-redo" class="button button-outline" type="button" disabled>重做</button></div>
+      </div>
+      <div class="cutout-outline-controls">
+        <label class="cutout-outline-toggle" for="cutout-outline-enabled"><input id="cutout-outline-enabled" type="checkbox" disabled><span id="cutout-outline-title">添加白色贴纸描边</span></label>
+        <label class="cutout-outline-width" for="cutout-outline-width"><span id="cutout-outline-width-title">描边粗细</span><strong id="cutout-outline-width-value">4 px</strong><input id="cutout-outline-width" type="range" min="1" max="8" step="1" value="4" aria-label="描边粗细" disabled></label>
+      </div>
+      <div class="cutout-previews">
+        <div class="cutout-preview-card"><div id="cutout-original-label" class="cutout-preview-label">原图 · 自动抠图后可点选精修</div><div class="cutout-image-frame"><canvas id="cutout-selection-canvas" aria-label="原始图片；点击主体或背景可精修自动抠图"></canvas></div><div id="cutout-original-name" class="cutout-file-name"></div></div>
+        <div class="cutout-preview-card"><div class="cutout-preview-label">透明背景</div><div class="cutout-image-frame transparency-grid"><img id="cutout-result-preview" alt="已去除背景的透明结果预览"></div><div id="cutout-result-name" class="cutout-file-name"></div></div>
+      </div>
+      <div id="cutout-modal-error" class="inline-error hidden" role="alert"></div>
+      <div class="cutout-modal-actions">
+        <button id="cutout-cancel" class="button button-quiet" type="button">取消，返回当前选择</button>
+        <button id="cutout-original-only" class="button button-outline" type="button">仅用原图</button>
+        <button id="cutout-cutout-only" class="button button-primary" type="button" disabled>仅用透明抠图</button>
+        <button id="cutout-neither" class="button button-danger" type="button">都不保存</button>
+      </div>
+    </section>
+  </div>
+  <div id="original-crop-modal" class="cutout-modal original-crop-modal hidden" role="dialog" aria-modal="true" aria-labelledby="original-crop-title">
+      <div class="cutout-backdrop"></div>
+    <section class="cutout-card original-crop-card">
+      <header class="cutout-heading original-crop-heading"><div class="original-crop-heading-content"><div id="original-crop-kicker" class="section-kicker">仅用原图 · 本机裁切</div><div class="original-crop-title-row"><button id="original-crop-back" class="crop-page-back" type="button" aria-label="返回抠图预览" title="返回抠图预览"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7 7-7-7 7-7"/></svg></button><h2 id="original-crop-title">选择图片边角</h2><button id="original-crop-close" class="cutout-close" type="button" aria-label="关闭裁切预览">×</button></div></div></header>
+      <p id="original-crop-description" class="original-crop-description">先按原图比例完整显示整张图片；拖动图片或滑动缩放，实时调整圆形或圆角方形选区。</p>
+      <div id="original-crop-shapes" class="original-crop-shapes" role="group" aria-label="选择裁切形状">
+        <button class="original-crop-shape selected" type="button" data-original-crop-shape="rounded" aria-pressed="true"><span class="original-crop-swatch rounded" aria-hidden="true"></span><span><strong id="original-crop-rounded-label">圆角方形</strong><small id="original-crop-rounded-help">实时预览选区</small></span></button>
+        <button class="original-crop-shape" type="button" data-original-crop-shape="circle" aria-pressed="false"><span class="original-crop-swatch circle" aria-hidden="true"></span><span><strong id="original-crop-circle-label">圆形</strong><small id="original-crop-circle-help">圆形实时预览</small></span></button>
+      </div>
+      <div class="original-crop-preview-shell"><canvas id="original-crop-preview" width="512" height="512" tabindex="0" aria-label="裁切预览；可拖动调整构图"></canvas></div>
+      <label class="original-crop-zoom" for="original-crop-zoom"><span><strong id="original-crop-zoom-label">缩放</strong><output id="original-crop-zoom-value" for="original-crop-zoom">1.0×</output></span><input id="original-crop-zoom" type="range" min="1" max="3" step="0.01" value="1"></label>
+      <div id="original-crop-error" class="inline-error hidden" role="alert"></div>
+      <div class="cutout-modal-actions original-crop-actions"><button id="original-crop-apply" class="button button-primary" type="button">采用圆角方形原图</button></div>
+    </section>
+  </div>
+  <div id="accent-eyedropper-modal" class="cutout-modal accent-eyedropper-modal hidden" role="dialog" aria-modal="true" aria-labelledby="accent-eyedropper-title">
+    <div class="cutout-backdrop" data-accent-eyedropper-close></div>
+    <section class="cutout-card accent-eyedropper-card">
+      <header class="cutout-heading"><div><div id="accent-eyedropper-kicker" class="section-kicker">相册图片 · 本机取色</div><h2 id="accent-eyedropper-title">点选图片中的颜色</h2></div><button id="accent-eyedropper-close" class="cutout-close" type="button" aria-label="关闭取色器">×</button></header>
+      <p id="accent-eyedropper-help" class="accent-eyedropper-help">在图片上点按或拖动吸管；预览显示所选位置的原始像素颜色。</p>
+      <div class="accent-eyedropper-photo-shell"><div id="accent-eyedropper-photo-frame" class="accent-eyedropper-photo-frame"><img id="accent-eyedropper-image" alt="等待读取图片" draggable="false"><span id="accent-eyedropper-marker" class="accent-eyedropper-marker hidden" aria-hidden="true"></span></div></div>
+      <div class="accent-eyedropper-selection"><span id="accent-eyedropper-swatch" class="accent-eyedropper-swatch" aria-hidden="true"></span><span><strong id="accent-eyedropper-selection-title">当前像素</strong><small id="accent-eyedropper-status" role="status" aria-live="polite">点按或拖动图片以取色。</small></span><code id="accent-eyedropper-value">—</code></div>
+      <div class="cutout-modal-actions accent-eyedropper-actions"><button id="accent-eyedropper-cancel" class="button button-quiet" type="button">取消</button><button id="accent-eyedropper-apply" class="button button-primary" type="button" disabled>使用此颜色</button></div>
+    </section>
+  </div>
+  <div id="folder-operation-modal" class="cutout-modal hidden" role="dialog" aria-modal="true" aria-labelledby="folder-operation-title" aria-describedby="folder-operation-description">
+    <div class="cutout-backdrop" data-folder-operation-close></div>
+    <section class="cutout-card folder-operation-card">
+      <header class="cutout-heading"><div><div id="folder-operation-kicker" class="section-kicker">文件夹整理 · 仅暂存</div><h2 id="folder-operation-title">新建分类文件夹</h2></div><button id="folder-operation-close" class="cutout-close" type="button" aria-label="关闭文件夹操作">×</button></header>
+      <p id="folder-operation-description" class="rename-description">变更只会先暂存在本机。你可以检查影响路径；只有稍后单独确认提交后才会写入 GitHub。</p>
+      <label id="folder-operation-name-wrap" class="rename-field" for="folder-operation-name"><span id="folder-operation-name-label">文件夹名称</span><input id="folder-operation-name" type="text" maxlength="120" autocomplete="off" spellcheck="false"></label>
+      <label id="folder-operation-destination-wrap" class="move-field hidden" for="folder-operation-destination"><span id="folder-operation-destination-label">移动到目标文件夹</span><select id="folder-operation-destination"></select></label>
+      <div id="folder-operation-preview" class="folder-operation-preview" aria-live="polite"></div>
+      <div id="folder-operation-error" class="inline-error hidden" role="alert"></div>
+      <div class="cutout-modal-actions"><button id="folder-operation-cancel" class="button button-quiet" type="button">取消</button><button id="folder-operation-stage" class="button button-primary" type="button">暂存变更</button></div>
+    </section>
+  </div>
+  <div id="move-modal" class="cutout-modal hidden" role="dialog" aria-modal="true" aria-labelledby="move-title">
+    <div class="cutout-backdrop" data-move-close></div>
+    <section class="move-card">
+      <header class="cutout-heading"><div><div class="section-kicker" data-i18n="moveKicker">分类整理 · 暂存预览</div><h2 id="move-title" data-i18n="moveTitle">移动到其他分类</h2></div><button id="move-close" class="cutout-close" type="button" aria-label="关闭移动预览">×</button></header>
+      <p class="move-description" data-i18n="moveDescription">先选择目标图标分类及其 JSON 索引，再单独选择图片目标文件夹。只移动这一个图标的图片文件；预览和 URL 都会使用所选的准确路径。先在本机预览；还需单独确认才会写入 GitHub。</p>
+      <div class="move-field"><span data-i18n="moveSource">来源 JSON 索引</span><code id="move-source-path"></code></div>
+      <label class="move-field" for="move-destination"><span data-i18n="moveDestination">目标图标分类</span><select id="move-destination"></select></label>
+      <div class="move-field"><span data-i18n="moveDestinationIndex">目标 JSON 索引</span><code id="move-destination-path"></code></div>
+      <label class="move-field" for="move-image-directory"><span data-i18n="moveImageDirectory">图片目标文件夹</span><select id="move-image-directory"></select></label>
+      <div id="move-preview" class="move-preview" aria-live="polite"></div>
+      <div id="move-error" class="inline-error hidden" role="alert"></div>
+      <div class="cutout-modal-actions"><button id="move-cancel" class="button button-quiet" type="button" data-i18n="moveCancel">取消</button><button id="move-confirm" class="button button-primary" type="button" data-i18n="moveStage">暂存移动</button></div>
+    </section>
+  </div>
+  <div id="rename-modal" class="cutout-modal rename-modal hidden" role="dialog" aria-modal="true" aria-labelledby="rename-title" aria-describedby="rename-description">
+    <div class="cutout-backdrop" data-rename-close></div>
+    <section class="cutout-card rename-card">
+      <header class="cutout-heading"><div><div id="rename-kicker" class="section-kicker">本机暂存 · 尚未写入</div><h2 id="rename-title">改名称</h2></div><button id="rename-close" class="cutout-close" type="button" aria-label="取消改名">×</button></header>
+      <p id="rename-description" class="rename-description">确认后只会暂存在当前索引；点击保存整理前不会写入 GitHub。</p>
+      <label class="rename-field" for="rename-input"><span id="rename-field-label">名称</span><input id="rename-input" type="text" maxlength="120" autocomplete="off" spellcheck="false"></label>
+      <div class="rename-meta"><span id="rename-help">名称长度为 1–120 个字符。</span><output id="rename-count" for="rename-input">0/120</output></div>
+      <div id="rename-error" class="inline-error hidden" role="alert"></div>
+      <div class="cutout-modal-actions rename-actions"><button id="rename-cancel" class="button button-quiet" type="button">取消</button><button id="rename-confirm" class="button button-primary" type="button">暂存改名</button></div>
+    </section>
+  </div>
+  <div id="upload-confirm-modal" class="cutout-modal upload-confirm-modal hidden" role="dialog" aria-modal="true" aria-labelledby="upload-confirm-title" aria-describedby="upload-confirm-description">
+    <div class="cutout-backdrop" data-upload-confirm-close></div>
+    <section class="cutout-card upload-confirm-card">
+      <header class="cutout-heading"><div><div id="upload-confirm-kicker" class="section-kicker">写入 GitHub · 最后确认</div><h2 id="upload-confirm-title">确认上传图标？</h2></div><button id="upload-confirm-close" class="cutout-close" type="button" aria-label="取消上传">×</button></header>
+      <p id="upload-confirm-description" class="upload-confirm-description">确认后会新增图像文件并更新所选 JSON 索引。内容只会在你点击确认后提交。</p>
+      <div class="upload-confirm-target"><div class="upload-confirm-target-row"><span id="upload-confirm-repository-label">仓库</span><strong id="upload-confirm-repository"></strong></div><div class="upload-confirm-target-row"><span id="upload-confirm-branch-label">分支</span><strong id="upload-confirm-branch"></strong></div><div class="upload-confirm-target-row"><span id="upload-confirm-category-label">目标分类</span><strong id="upload-confirm-category"></strong></div><div class="upload-confirm-target-row"><span id="upload-confirm-directory-label">目标图片文件夹</span><code id="upload-confirm-directory"></code></div><div class="upload-confirm-target-row"><span id="upload-confirm-index-label">JSON 索引</span><code id="upload-confirm-index"></code></div></div>
+      <p id="upload-confirm-directory-note" class="upload-confirm-directory-note"></p>
+      <div class="upload-confirm-files"><div id="upload-confirm-files-title" class="upload-confirm-files-title">将上传的文件</div><ul id="upload-confirm-file-list"></ul></div>
+      <div id="upload-confirm-atomic-note" class="upload-confirm-atomic-note">图像文件与上述 JSON 索引会在同一个 GitHub 提交中更新；不会修改其他分类索引。</div>
+      <div id="upload-confirm-error" class="inline-error hidden" role="alert"></div>
+      <div class="cutout-modal-actions upload-confirm-actions"><button id="upload-confirm-cancel" class="button button-quiet" type="button">取消</button><button id="upload-confirm-submit" class="button button-primary" type="button">确认上传并保存</button></div>
+    </section>
+  </div>
+</body>
+</html>
