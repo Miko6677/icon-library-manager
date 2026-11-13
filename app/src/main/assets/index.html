@@ -246,7 +246,7 @@
         <button class="original-crop-shape selected" type="button" data-original-crop-shape="rounded" aria-pressed="true"><span class="original-crop-swatch rounded" aria-hidden="true"></span><span><strong id="original-crop-rounded-label">圆角方形</strong><small id="original-crop-rounded-help">实时预览选区</small></span></button>
         <button class="original-crop-shape" type="button" data-original-crop-shape="circle" aria-pressed="false"><span class="original-crop-swatch circle" aria-hidden="true"></span><span><strong id="original-crop-circle-label">圆形</strong><small id="original-crop-circle-help">圆形实时预览</small></span></button>
       </div>
-      <div class="original-crop-preview-shell"><canvas id="original-crop-preview" width="512" height="512" tabindex="0" aria-label="裁切预览；可拖动调整构图"></canvas></div>
+      <div class="original-crop-preview-shell"><canvas id="original-crop-preview" class="original-crop-preview" width="512" height="512" tabindex="0" aria-label="裁切预览；可拖动调整构图"></canvas></div>
       <label class="original-crop-zoom" for="original-crop-zoom"><span><strong id="original-crop-zoom-label">缩放</strong><output id="original-crop-zoom-value" for="original-crop-zoom">1.0×</output></span><input id="original-crop-zoom" type="range" min="1" max="3" step="0.01" value="1"></label>
       <div id="original-crop-error" class="inline-error hidden" role="alert"></div>
       <div class="cutout-modal-actions original-crop-actions"><button id="original-crop-apply" class="button button-primary" type="button">采用圆角方形原图</button></div>

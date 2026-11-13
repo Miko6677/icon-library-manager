@@ -24,7 +24,7 @@ IS-Net q8 权重随 APK 打包（约 44.4 MB），来源及 Apache-2.0 许可证
 
 ## 安装与构建
 
-1.1.3 调试 APK：在 [GitHub Releases](https://github.com/Miko6677/icon-library-manager/releases/latest) 下载。APK 使用调试签名，适合个人测试。
+1.1.4 调试 APK：在 [GitHub Releases](https://github.com/Miko6677/icon-library-manager/releases/latest) 下载。APK 使用调试签名，适合个人测试。
 
 需要 JDK 17 或更高版本和 Android SDK platform 35。在项目根目录执行：
 
